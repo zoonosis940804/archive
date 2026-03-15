@@ -1,0 +1,111 @@
+﻿<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Builder Archive | 교육·투자·도구 개발</title>
+    <meta
+      name="description"
+      content="교실에서 검증한 교육 도구와 실행 기록을 정리한 공개 아카이브입니다."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="hero" id="top">
+      <div class="hero-bg" aria-hidden="true">
+        <span class="orb orb-a"></span>
+        <span class="orb orb-b"></span>
+        <span class="orb orb-c"></span>
+      </div>
+      <div class="container hero-inner">
+        <p class="eyebrow" id="hero-eyebrow"></p>
+        <h1 id="hero-title"></h1>
+        <p class="hero-copy" id="hero-copy"></p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#collection">프로젝트 보기</a>
+          <a class="btn btn-ghost" href="#blueprint">운영 기준 보기</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section section-about" id="about">
+        <div class="container about-grid">
+          <article class="profile-card">
+            <div class="avatar" aria-hidden="true" id="profile-initial">B</div>
+            <h2 id="profile-title"></h2>
+            <p class="role" id="profile-role"></p>
+            <p id="profile-summary"></p>
+          </article>
+
+          <article class="about-panel">
+            <h2 id="about-title"></h2>
+            <p id="about-body-1"></p>
+            <p id="about-body-2"></p>
+            <blockquote id="about-quote"></blockquote>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section-collection" id="collection">
+        <div class="container">
+          <div class="section-head">
+            <h2 id="collection-title"></h2>
+            <p id="project-count"></p>
+          </div>
+
+          <div class="toolbar">
+            <label class="search-wrap" for="search-input">
+              <span>검색</span>
+              <input
+                id="search-input"
+                type="text"
+                placeholder="프로젝트명, 태그, 설명 검색"
+                autocomplete="off"
+              />
+            </label>
+            <div class="filter-wrap" id="filter-wrap"></div>
+          </div>
+
+          <div class="project-grid" id="project-grid"></div>
+        </div>
+      </section>
+
+      <section class="section section-blueprint" id="blueprint">
+        <div class="container">
+          <div class="section-head">
+            <h2 id="blueprint-title"></h2>
+            <p id="blueprint-subtitle"></p>
+          </div>
+          <div class="blueprint-grid" id="blueprint-grid"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-inner">
+        <p id="footer-note"></p>
+        <a href="#top">맨 위로</a>
+      </div>
+    </footer>
+
+    <dialog id="project-modal" class="modal">
+      <article class="modal-card" id="modal-card">
+        <button class="modal-close" id="modal-close" type="button" aria-label="닫기">×</button>
+        <p class="modal-category" id="modal-category"></p>
+        <h3 id="modal-title"></h3>
+        <p class="modal-desc" id="modal-desc"></p>
+        <div class="tag-list" id="modal-tags"></div>
+        <a id="modal-link" class="btn btn-primary" target="_blank" rel="noopener noreferrer">프로젝트 열기</a>
+      </article>
+    </dialog>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

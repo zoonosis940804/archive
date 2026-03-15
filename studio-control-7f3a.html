@@ -1,0 +1,102 @@
+﻿<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Builder Archive Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="admin-page">
+    <main class="admin-layout">
+      <section id="admin-login" class="admin-login">
+        <h1>관리자 로그인</h1>
+        <p>편집 권한 확인 후 관리 페이지가 열립니다.</p>
+        <label>
+          비밀번호
+          <input id="admin-password" type="password" autocomplete="current-password" />
+        </label>
+        <button id="admin-login-btn" type="button">로그인</button>
+        <p id="admin-login-error" class="admin-error" aria-live="polite"></p>
+        <a href="./index.html">공개 페이지로 이동</a>
+      </section>
+
+      <section id="admin-app" class="admin-app hidden">
+        <header class="admin-topbar">
+          <h1>사이트 관리자</h1>
+          <div>
+            <a class="admin-link" href="./index.html" target="_blank" rel="noopener noreferrer">공개 페이지 열기</a>
+            <button id="admin-logout" type="button">로그아웃</button>
+          </div>
+        </header>
+
+        <section class="admin-section">
+          <h3>기본 문구</h3>
+          <label>상단 라벨<input id="f-hero-eyebrow" type="text" /></label>
+          <label>메인 제목(줄바꿈은 | 사용)<input id="f-hero-title" type="text" /></label>
+          <label>메인 설명<textarea id="f-hero-copy"></textarea></label>
+          <label>프로필 제목<input id="f-profile-title" type="text" /></label>
+          <label>프로필 역할<input id="f-profile-role" type="text" /></label>
+          <label>프로필 요약<textarea id="f-profile-summary"></textarea></label>
+          <label>소개 섹션 제목<input id="f-about-title" type="text" /></label>
+          <label>소개 문단 1<textarea id="f-about-body-1"></textarea></label>
+          <label>소개 문단 2<textarea id="f-about-body-2"></textarea></label>
+          <label>인용문<input id="f-about-quote" type="text" /></label>
+          <label>컬렉션 제목<input id="f-collection-title" type="text" /></label>
+          <label>운영 기준 제목<input id="f-blueprint-title" type="text" /></label>
+          <label>운영 기준 부제<input id="f-blueprint-subtitle" type="text" /></label>
+          <label>하단 멘트<input id="f-footer-note" type="text" /></label>
+        </section>
+
+        <section class="admin-section">
+          <h3>운영 기준 카드</h3>
+          <p class="admin-tip">한 줄에 1개, 형식: 제목|설명</p>
+          <textarea id="f-blueprints" class="admin-large"></textarea>
+        </section>
+
+        <section class="admin-section">
+          <h3>프로젝트 추가/수정</h3>
+          <input id="p-id" type="hidden" />
+          <label>카테고리<input id="p-category" type="text" placeholder="예: 교육 실천" /></label>
+          <label>제목<input id="p-title" type="text" /></label>
+          <label>설명<textarea id="p-description"></textarea></label>
+          <label>태그(쉼표 구분)<input id="p-tags" type="text" placeholder="#태그1, #태그2" /></label>
+          <label>링크<input id="p-link" type="url" placeholder="https://" /></label>
+          <div class="admin-inline">
+            <button id="project-save" type="button">저장</button>
+            <button id="project-clear" type="button">입력 초기화</button>
+          </div>
+          <div id="project-list" class="project-admin-list"></div>
+        </section>
+
+        <section class="admin-section">
+          <h3>데이터 관리</h3>
+          <p class="admin-tip">수정 후 data.json을 다운로드하여 저장소의 data.json 파일을 덮어쓴 뒤 커밋/푸시해 주세요.</p>
+          <div class="admin-inline">
+            <button id="content-save" type="button">문구 저장</button>
+            <button id="export-json" type="button">data.json 다운로드</button>
+            <label class="import-btn">JSON 불러오기<input id="import-json" type="file" accept="application/json" /></label>
+            <button id="reset-data" type="button">배포 데이터로 복원</button>
+          </div>
+        </section>
+
+        <section class="admin-section">
+          <h3>관리자 비밀번호 변경</h3>
+          <label>현재 비밀번호<input id="pwd-current" type="password" autocomplete="current-password" /></label>
+          <label>새 비밀번호<input id="pwd-new" type="password" autocomplete="new-password" /></label>
+          <label>새 비밀번호 확인<input id="pwd-confirm" type="password" autocomplete="new-password" /></label>
+          <div class="admin-inline">
+            <button id="pwd-save" type="button">비밀번호 변경</button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

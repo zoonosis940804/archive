@@ -1,0 +1,41 @@
+{
+  "content": {
+    "heroEyebrow": "학습 툴, 교사 보조 툴, 게임 제작",
+    "heroTitle": "Indischool ID: Bitcoin|mail ID: Zenith1005@proton.me|사용 모델: GPT PLUS, CLAUDE PRO",
+    "heroCopy": "2026년 초등학교 5학년 담임 교사입니다. 바이브 코딩을 통해 학습 툴, 교사 보조용 툴, 게임, 유틸리티 웹사이트 등을 제작합니다.",
+    "profileTitle": "Zenith1005",
+    "profileRole": "초등 5학년 담임 · 비트맥시 · 도구 개발자",
+    "profileSummary": "학습 효율과 실행 가능성을 기준으로 프로젝트를 설계하고 개선합니다. 각 카드에서 문제, 사용 대상, 활용 맥락을 한눈에 확인하실 수 있습니다.",
+    "aboutTitle": "방문자 중심 운영 원칙",
+    "aboutBody1": "프로젝트는 기능 나열보다 실제 사용 맥락을 중심으로 안내합니다. 무엇을 해결하는지, 어떤 상황에서 효과적인지, 바로 판단할 수 있게 정리했습니다.",
+    "aboutBody2": "학습 도구, 교사 보조 도구, 게임으로 크게 분류해 탐색 동선을 단순하게 유지합니다. 필요한 항목을 찾은 뒤 바로 접속할 수 있도록 링크 중심 구조를 적용했습니다.",
+    "aboutQuote": "필요한 정보는 빠르게, 실행은 더 쉽게.",
+    "collectionTitle": "Project Collection",
+    "blueprintTitle": "사이트 운영 기준",
+    "blueprintSubtitle": "방문자 경험을 우선하기 위한 핵심 기준",
+    "footerNote": "© 2026.3 ~ 비트맥시 교사의 작업 공간"
+  },
+  "blueprints": [
+    {
+      "title": "1) 문제 먼저 안내",
+      "description": "각 프로젝트는 무엇을 해결하는 도구인지부터 명확하게 보여드립니다."
+    },
+    {
+      "title": "2) 즉시 활용 가능",
+      "description": "탐색 후 바로 실행하실 수 있도록 링크와 핵심 정보 중심으로 구성합니다."
+    },
+    {
+      "title": "3) 검증 기반 업데이트",
+      "description": "현장 적용 결과와 피드백을 반영해 지속적으로 내용을 개선합니다."
+    },
+    {
+      "title": "4) 탐색 동선 단순화",
+      "description": "카테고리와 검색 기능으로 필요한 프로젝트를 빠르게 찾으실 수 있습니다."
+    },
+    {
+      "title": "5) 과장 없는 설명",
+      "description": "실제로 확인 가능한 정보만 정리해 신뢰도 높은 아카이브를 유지합니다."
+    }
+  ],
+  "projects": []
+}

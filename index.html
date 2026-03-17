@@ -128,11 +128,6 @@
           >카테고리
           <select id="p-category">
             <option value="">선택</option>
-            <option value="비트코인">비트코인</option>
-            <option value="게임">게임</option>
-            <option value="수업 보조">수업 보조</option>
-            <option value="학습 보조">학습 보조</option>
-            <option value="기타">기타</option>
           </select>
         </label>
         <label>제목<input id="p-title" type="text" /></label>
@@ -145,6 +140,16 @@
           <button id="project-clear" type="button">입력 초기화</button>
         </div>
         <div id="project-list" class="project-admin-list"></div>
+      </section>
+
+      <section class="admin-section">
+        <h3>카테고리 관리</h3>
+        <p class="admin-tip">삭제 시 해당 카테고리의 프로젝트는 다른 카테고리로 이동되며 삭제되지 않습니다.</p>
+        <div class="admin-inline">
+          <input id="cat-new-name" type="text" placeholder="새 카테고리명" />
+          <button id="cat-add" type="button">카테고리 추가</button>
+        </div>
+        <div id="category-admin-list" class="category-admin-list"></div>
       </section>
 
       <section class="admin-section">

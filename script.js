@@ -4,7 +4,7 @@ const CACHE_KEY = 'builder_archive_cache_v3';
 const ADMIN_SESSION_KEY = 'builder_archive_admin_session';
 const DEFAULT_ADMIN_PASSWORD_HASH = '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0'; // 0000
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
-const FIXED_CATEGORIES = ['비트코인', '게임', '수업 보조', '학습 보조', '기타'];
+const DEFAULT_CATEGORIES = ['비트코인', '게임', '수업 보조', '학습 보조', '기타'];
 const CATEGORY_MIGRATION = {
   '교사 보조 도구': '수업 보조',
   '수업 보조 도구': '수업 보조',
@@ -16,6 +16,7 @@ const defaultState = {
     adminPasswordHash: DEFAULT_ADMIN_PASSWORD_HASH,
     updatedAt: null,
   },
+  categories: [...DEFAULT_CATEGORIES],
   content: {
     heroEyebrow: 'CLASSROOM-TESTED TOOL ARCHIVE',
     heroTitle: '현장에서 검증한 도구를 공개합니다|복잡한 설명보다 바로 쓸 수 있는 정보로 안내합니다|교육·투자·개발 관점을 연결합니다',
@@ -78,17 +79,42 @@ function hasCoreShape(candidate) {
   return Boolean(candidate && candidate.content && Array.isArray(candidate.projects));
 }
 
+function normalizeCategoryName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeCategoryList(values) {
+  const unique = [];
+  const seen = new Set();
+  (Array.isArray(values) ? values : []).forEach((value) => {
+    const name = normalizeCategoryName(value);
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    unique.push(name);
+  });
+  return unique;
+}
+
 function normalizeState(input) {
   if (!hasCoreShape(input)) return deepClone(defaultState);
 
   const next = deepClone(defaultState);
+  next.categories = normalizeCategoryList(input.categories);
+  if (!next.categories.length) next.categories = [...DEFAULT_CATEGORIES];
+
+  const categorySet = new Set(next.categories);
+  const fallbackCategory = next.categories[0];
   next.content = { ...next.content, ...(input.content || {}) };
   next.projects = Array.isArray(input.projects)
     ? input.projects.map((project) => {
-        const migratedCategory = migrateCategoryName(project.category);
+        const migratedCategory = normalizeCategoryName(migrateCategoryName(project.category)) || fallbackCategory;
+        if (!categorySet.has(migratedCategory)) {
+          categorySet.add(migratedCategory);
+          next.categories.push(migratedCategory);
+        }
         return {
           id: Number(project.id) || 0,
-          category: FIXED_CATEGORIES.includes(migratedCategory) ? migratedCategory : '기타',
+          category: migratedCategory,
           title: String(project.title || ''),
           description: String(project.description || ''),
           tags: Array.isArray(project.tags) ? project.tags.map((tag) => String(tag)) : [],
@@ -121,6 +147,12 @@ function loadCache() {
 
 function getCurrentAdminHash() {
   return state.meta?.adminPasswordHash || DEFAULT_ADMIN_PASSWORD_HASH;
+}
+
+function getManagedCategories() {
+  const normalized = normalizeCategoryList(state.categories);
+  if (!normalized.length) return [...DEFAULT_CATEGORIES];
+  return normalized;
 }
 
 function touchLocalState() {
@@ -224,10 +256,18 @@ function renderPublicPage() {
 }
 
 function getCategories() {
-  return ['전체', ...FIXED_CATEGORIES];
+  return ['전체', ...getManagedCategories()];
+}
+
+function ensureActiveCategoryValid() {
+  const categories = getCategories();
+  if (categories.includes(activeCategory)) return false;
+  activeCategory = '전체';
+  return true;
 }
 
 function filteredProjects() {
+  ensureActiveCategoryValid();
   const keyword = searchTerm.trim().toLowerCase();
   return state.projects.filter((project) => {
     const categoryPass = activeCategory === '전체' || project.category === activeCategory;
@@ -265,6 +305,8 @@ function renderProjects() {
   const grid = getEl('project-grid');
   const count = getEl('project-count');
   if (!grid || !count) return;
+  const didResetCategory = ensureActiveCategoryValid();
+  if (didResetCategory) renderFilterButtons();
 
   const list = filteredProjects();
   count.textContent = `총 ${state.projects.length}개 중 ${list.length}개 표시`;
@@ -399,16 +441,162 @@ function renderAdminCategorySelect(selected = '') {
   const select = getEl('p-category');
   if (!select) return;
 
+  const categories = getManagedCategories();
   select.innerHTML = [
     '<option value="">선택</option>',
-    ...FIXED_CATEGORIES.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`),
+    ...categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`),
   ].join('');
 
-  if (selected && FIXED_CATEGORIES.includes(selected)) {
+  if (selected && categories.includes(selected)) {
     select.value = selected;
   } else {
     select.value = '';
   }
+}
+
+function renderCategoryAdminList() {
+  const wrap = getEl('category-admin-list');
+  if (!wrap) return;
+
+  const categories = getManagedCategories();
+  if (!categories.length) {
+    wrap.innerHTML = '<p class="admin-tip">등록된 카테고리가 없습니다.</p>';
+    return;
+  }
+
+  wrap.innerHTML = categories
+    .map(
+      (category) => `
+        <div class="category-admin-item" data-category="${escapeHtml(category)}">
+          <input type="text" value="${escapeHtml(category)}" />
+          <div class="mini">
+            <button type="button" data-action="rename">이름변경</button>
+            <button type="button" data-action="delete">삭제</button>
+          </div>
+        </div>
+      `
+    )
+    .join('');
+
+  wrap.querySelectorAll('.category-admin-item').forEach((row) => {
+    const sourceCategory = String(row.dataset.category || '');
+    const input = row.querySelector('input');
+
+    row.querySelector('[data-action="rename"]')?.addEventListener('click', async () => {
+      await renameCategoryFromAdmin(sourceCategory, input?.value || '');
+    });
+
+    row.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
+      await deleteCategoryFromAdmin(sourceCategory);
+    });
+  });
+}
+
+async function addCategoryFromAdmin() {
+  const input = getEl('cat-new-name');
+  if (!input) return;
+
+  const name = normalizeCategoryName(input.value);
+  if (!name) {
+    alert('추가할 카테고리명을 입력해 주세요.');
+    return;
+  }
+
+  const categories = getManagedCategories();
+  if (categories.includes(name)) {
+    alert('이미 존재하는 카테고리입니다.');
+    return;
+  }
+
+  state.categories = [...categories, name];
+  touchLocalState();
+  input.value = '';
+  renderAdminCategorySelect(name);
+  renderCategoryAdminList();
+  renderFilterButtons();
+  renderProjects();
+  await saveCloudState('카테고리가 추가되었습니다.');
+}
+
+async function renameCategoryFromAdmin(sourceCategory, nextCategory) {
+  const before = normalizeCategoryName(sourceCategory);
+  const after = normalizeCategoryName(nextCategory);
+  const categories = getManagedCategories();
+
+  if (!before || !categories.includes(before)) return;
+  if (!after) {
+    alert('변경할 카테고리명을 입력해 주세요.');
+    return;
+  }
+  if (before === after) return;
+  if (categories.includes(after)) {
+    alert('같은 이름의 카테고리가 이미 있습니다.');
+    return;
+  }
+
+  state.categories = categories.map((category) => (category === before ? after : category));
+  state.projects = state.projects.map((project) =>
+    project.category === before ? { ...project, category: after } : project
+  );
+  if (activeCategory === before) activeCategory = after;
+
+  touchLocalState();
+  renderAdminCategorySelect(after);
+  renderCategoryAdminList();
+  renderProjectAdminList();
+  renderFilterButtons();
+  renderProjects();
+  await saveCloudState('카테고리 이름이 변경되었습니다.');
+}
+
+async function deleteCategoryFromAdmin(categoryName) {
+  const source = normalizeCategoryName(categoryName);
+  const categories = getManagedCategories();
+  if (!source || !categories.includes(source)) return;
+  if (categories.length <= 1) {
+    alert('카테고리는 최소 1개 이상 유지되어야 합니다.');
+    return;
+  }
+
+  const targets = categories.filter((category) => category !== source);
+  const linkedCount = state.projects.filter((project) => project.category === source).length;
+  let moveTarget = targets[0];
+
+  if (linkedCount > 0) {
+    const typed = prompt(
+      `'${source}' 카테고리의 프로젝트 ${linkedCount}개를 이동할 카테고리명을 입력해 주세요.\n가능 값: ${targets.join(', ')}`,
+      moveTarget
+    );
+    if (!typed) return;
+    moveTarget = normalizeCategoryName(typed);
+    if (!targets.includes(moveTarget)) {
+      alert('이동 대상 카테고리명이 올바르지 않습니다.');
+      return;
+    }
+  }
+
+  const confirmed = confirm(
+    linkedCount > 0
+      ? `'${source}' 카테고리를 삭제합니다.\n프로젝트 ${linkedCount}개는 '${moveTarget}'로 이동됩니다. 계속하시겠습니까?`
+      : `'${source}' 카테고리를 삭제하시겠습니까?`
+  );
+  if (!confirmed) return;
+
+  state.categories = categories.filter((category) => category !== source);
+  if (linkedCount > 0) {
+    state.projects = state.projects.map((project) =>
+      project.category === source ? { ...project, category: moveTarget } : project
+    );
+  }
+  if (activeCategory === source) activeCategory = '전체';
+
+  touchLocalState();
+  renderAdminCategorySelect();
+  renderCategoryAdminList();
+  renderProjectAdminList();
+  renderFilterButtons();
+  renderProjects();
+  await saveCloudState('카테고리가 삭제되었습니다.');
 }
 
 function clearProjectForm() {
@@ -493,6 +681,7 @@ async function saveContentFromAdmin() {
 }
 
 async function saveProjectFromAdmin() {
+  const managedCategories = getManagedCategories();
   const category = getEl('p-category').value.trim();
   const title = getEl('p-title').value.trim();
   const description = getEl('p-description').value.trim();
@@ -507,7 +696,7 @@ async function saveProjectFromAdmin() {
     alert('카테고리, 제목, 설명은 필수입니다.');
     return;
   }
-  if (!FIXED_CATEGORIES.includes(category)) {
+  if (!managedCategories.includes(category)) {
     alert('카테고리를 올바르게 선택해 주세요.');
     return;
   }
@@ -582,6 +771,8 @@ function importStateJson(file) {
       touchLocalState();
       renderPublicPage();
       fillAdminContentForm();
+      renderAdminCategorySelect();
+      renderCategoryAdminList();
       renderProjectAdminList();
       await saveCloudState('JSON을 불러와 반영했습니다.');
     } catch {
@@ -601,6 +792,14 @@ function setupAdminActions() {
     saveProjectFromAdmin();
   });
   getEl('project-clear')?.addEventListener('click', clearProjectForm);
+  getEl('cat-add')?.addEventListener('click', () => {
+    addCategoryFromAdmin();
+  });
+  getEl('cat-new-name')?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addCategoryFromAdmin();
+  });
 
   getEl('import-json')?.addEventListener('change', (event) => {
     const file = event.target.files?.[0];
@@ -617,6 +816,8 @@ function setupAdminActions() {
     touchLocalState();
     renderPublicPage();
     fillAdminContentForm();
+    renderAdminCategorySelect();
+    renderCategoryAdminList();
     renderProjectAdminList();
     await saveCloudState('초기 데이터로 복원되었습니다.');
   });
@@ -664,6 +865,7 @@ function openInlineAdminDrawer() {
   if (!drawer) return;
   fillAdminContentForm();
   renderAdminCategorySelect();
+  renderCategoryAdminList();
   renderProjectAdminList();
   setupAdminActions();
   drawer.classList.remove('hidden');

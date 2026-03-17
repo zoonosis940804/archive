@@ -1,10 +1,15 @@
-﻿const ADMIN_SESSION_KEY = 'builder_archive_admin_session';
-const ADMIN_PASSWORD_HASH_KEY = 'builder_archive_admin_password_hash';
-const DEFAULT_ADMIN_PASSWORD_HASH = 'ee315c20b11c393aa0ced4107650acd106bf6a2c414c9e59b34fbe53af99a988';
-const DRAFT_KEY = 'builder_archive_admin_draft_v1';
-const DATA_FILE_PATH = './data.json';
+const CLOUD_ENDPOINT = 'https://jsonblob.com/api/jsonBlob/019cfbe9-709f-78bb-b41a-e30d7620c937';
+const CLOUD_POLL_MS = 7000;
+const CACHE_KEY = 'builder_archive_cache_v3';
+const ADMIN_SESSION_KEY = 'builder_archive_admin_session';
+const DEFAULT_ADMIN_PASSWORD_HASH = '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0'; // 0000
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 
 const defaultState = {
+  meta: {
+    adminPasswordHash: DEFAULT_ADMIN_PASSWORD_HASH,
+    updatedAt: null,
+  },
   content: {
     heroEyebrow: 'CLASSROOM-TESTED TOOL ARCHIVE',
     heroTitle: '현장에서 검증한 도구를 공개합니다|복잡한 설명보다 바로 쓸 수 있는 정보로 안내합니다|교육·투자·개발 관점을 연결합니다',
@@ -53,49 +58,18 @@ const defaultState = {
 let state = deepClone(defaultState);
 let activeCategory = '전체';
 let searchTerm = '';
+let publicEventsBound = false;
+let modalEventsBound = false;
+let adminActionsBound = false;
+let isSavingToCloud = false;
+let lastSeenUpdatedAt = null;
 
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
-function isValidState(parsed) {
-  return Boolean(parsed && parsed.content && Array.isArray(parsed.projects) && Array.isArray(parsed.blueprints));
-}
-
-async function loadDataFileState() {
-  try {
-    const response = await fetch(DATA_FILE_PATH, { cache: 'no-store' });
-    if (!response.ok) return deepClone(defaultState);
-    const parsed = await response.json();
-    if (!isValidState(parsed)) return deepClone(defaultState);
-    return parsed;
-  } catch {
-    return deepClone(defaultState);
-  }
-}
-
-function getAdminPasswordHash() {
-  return localStorage.getItem(ADMIN_PASSWORD_HASH_KEY) || DEFAULT_ADMIN_PASSWORD_HASH;
-}
-
-function saveDraft() {
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
-}
-
-function clearDraft() {
-  localStorage.removeItem(DRAFT_KEY);
-}
-
-function loadDraft() {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!isValidState(parsed)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+function getEl(id) {
+  return document.getElementById(id);
 }
 
 function escapeHtml(value) {
@@ -107,8 +81,134 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
-function getEl(id) {
-  return document.getElementById(id);
+function setAdminStatus(text) {
+  const statusEl = getEl('admin-status');
+  if (statusEl) statusEl.textContent = text;
+}
+
+function hasCoreShape(candidate) {
+  return Boolean(candidate && candidate.content && Array.isArray(candidate.blueprints) && Array.isArray(candidate.projects));
+}
+
+function normalizeState(input) {
+  if (!hasCoreShape(input)) return deepClone(defaultState);
+
+  const next = deepClone(defaultState);
+  next.content = { ...next.content, ...(input.content || {}) };
+  next.blueprints = Array.isArray(input.blueprints) ? input.blueprints : [];
+  next.projects = Array.isArray(input.projects)
+    ? input.projects.map((project) => ({
+        id: Number(project.id) || 0,
+        category: String(project.category || ''),
+        title: String(project.title || ''),
+        description: String(project.description || ''),
+        tags: Array.isArray(project.tags) ? project.tags.map((tag) => String(tag)) : [],
+        link: String(project.link || ''),
+        downloadDataUrl: String(project.downloadDataUrl || ''),
+        downloadName: String(project.downloadName || ''),
+      }))
+    : [];
+  next.meta = {
+    adminPasswordHash: String(input.meta?.adminPasswordHash || DEFAULT_ADMIN_PASSWORD_HASH),
+    updatedAt: input.meta?.updatedAt ? String(input.meta.updatedAt) : null,
+  };
+  return next;
+}
+
+function saveCache() {
+  localStorage.setItem(CACHE_KEY, JSON.stringify(state));
+}
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    return normalizeState(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function getCurrentAdminHash() {
+  return state.meta?.adminPasswordHash || DEFAULT_ADMIN_PASSWORD_HASH;
+}
+
+async function sha256(text) {
+  const msgBuffer = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function isAdminDrawerOpen() {
+  const drawer = getEl('admin-drawer');
+  return Boolean(drawer && !drawer.classList.contains('hidden'));
+}
+
+async function fetchCloudState() {
+  const response = await fetch(CLOUD_ENDPOINT, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`클라우드 조회 실패 (${response.status})`);
+  const parsed = await response.json();
+  return normalizeState(parsed);
+}
+
+async function saveCloudState(successMessage) {
+  isSavingToCloud = true;
+  try {
+    const next = deepClone(state);
+    next.meta.updatedAt = new Date().toISOString();
+
+    const response = await fetch(CLOUD_ENDPOINT, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(next),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`클라우드 저장 실패 (${response.status}): ${body.slice(0, 180)}`);
+    }
+
+    state = next;
+    lastSeenUpdatedAt = next.meta.updatedAt;
+    saveCache();
+    if (successMessage) setAdminStatus(successMessage);
+    return true;
+  } catch (error) {
+    setAdminStatus(error.message);
+    return false;
+  } finally {
+    isSavingToCloud = false;
+  }
+}
+
+function readBlueprintText(value) {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [title, ...rest] = line.split('|');
+      return {
+        title: title?.trim() || '제목 없음',
+        description: rest.join('|').trim() || '설명 없음',
+      };
+    });
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('파일 읽기에 실패했습니다.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function resolveDownloadUrl(project) {
+  return project.downloadDataUrl || '#';
 }
 
 function renderPublicPage() {
@@ -116,14 +216,11 @@ function renderPublicPage() {
   if (!heroEyebrow) return;
 
   const content = state.content;
-
   heroEyebrow.textContent = content.heroEyebrow;
-  const heroTitle = getEl('hero-title');
-  heroTitle.innerHTML = content.heroTitle
+  getEl('hero-title').innerHTML = content.heroTitle
     .split('|')
     .map((line, index) => (index === 1 ? `<span>${escapeHtml(line)}</span>` : escapeHtml(line)))
     .join('<br />');
-
   getEl('hero-copy').textContent = content.heroCopy;
   getEl('profile-initial').textContent = (content.profileTitle || 'B').charAt(0).toUpperCase();
   getEl('profile-title').textContent = content.profileTitle;
@@ -158,81 +255,89 @@ function getCategories() {
 
 function filteredProjects() {
   const keyword = searchTerm.trim().toLowerCase();
-
   return state.projects.filter((project) => {
     const categoryPass = activeCategory === '전체' || project.category === activeCategory;
     if (!categoryPass) return false;
     if (!keyword) return true;
-
     const target = [project.title, project.description, project.tags.join(' ')].join(' ').toLowerCase();
     return target.includes(keyword);
   });
 }
 
+function renderFilterButtons() {
+  const filterWrap = getEl('filter-wrap');
+  if (!filterWrap) return;
+
+  const categories = getCategories();
+  if (!categories.includes(activeCategory)) activeCategory = '전체';
+
+  filterWrap.innerHTML = categories
+    .map((category) => {
+      const activeClass = category === activeCategory ? 'active' : '';
+      return `<button class="filter-btn ${activeClass}" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`;
+    })
+    .join('');
+
+  filterWrap.querySelectorAll('button').forEach((button) => {
+    button.addEventListener('click', () => {
+      activeCategory = button.dataset.category;
+      renderFilterButtons();
+      renderProjects();
+    });
+  });
+}
+
+function renderProjects() {
+  const grid = getEl('project-grid');
+  const count = getEl('project-count');
+  if (!grid || !count) return;
+
+  const list = filteredProjects();
+  count.textContent = `총 ${state.projects.length}개 중 ${list.length}개 표시`;
+
+  if (!state.projects.length) {
+    grid.innerHTML = '<p class="empty-state">아직 공개된 프로젝트가 없습니다.</p>';
+    return;
+  }
+
+  if (!list.length) {
+    grid.innerHTML = '<p class="empty-state">조건에 맞는 프로젝트가 없습니다.</p>';
+    return;
+  }
+
+  grid.innerHTML = list
+    .map((project) => {
+      const fileBadge = project.downloadDataUrl ? '<span class="tag">첨부파일</span>' : '';
+      return `
+        <article class="project-card" data-id="${project.id}">
+          <span class="category">${escapeHtml(project.category)}</span>
+          <h3>${escapeHtml(project.title)}</h3>
+          <p>${escapeHtml(project.description)}</p>
+          <div class="tag-list">
+            ${project.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+            ${fileBadge}
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+
+  grid.querySelectorAll('.project-card').forEach((card) => {
+    card.addEventListener('click', () => openProjectModal(Number(card.dataset.id)));
+  });
+}
+
 function setupPublicProjects() {
   const searchInput = getEl('search-input');
-  const filterWrap = getEl('filter-wrap');
-  const projectGrid = getEl('project-grid');
-  const projectCount = getEl('project-count');
+  if (!searchInput) return;
 
-  if (!searchInput || !filterWrap || !projectGrid || !projectCount) return;
-
-  function renderFilterButtons() {
-    const categories = getCategories();
-    if (!categories.includes(activeCategory)) activeCategory = '전체';
-
-    filterWrap.innerHTML = categories
-      .map((category) => {
-        const activeClass = category === activeCategory ? 'active' : '';
-        return `<button class="filter-btn ${activeClass}" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`;
-      })
-      .join('');
-
-    filterWrap.querySelectorAll('button').forEach((button) => {
-      button.addEventListener('click', () => {
-        activeCategory = button.dataset.category;
-        renderFilterButtons();
-        renderProjects();
-      });
+  if (!publicEventsBound) {
+    searchInput.addEventListener('input', (event) => {
+      searchTerm = event.target.value;
+      renderProjects();
     });
+    publicEventsBound = true;
   }
-
-  function renderProjects() {
-    const list = filteredProjects();
-    projectCount.textContent = `총 ${state.projects.length}개 중 ${list.length}개 표시`;
-
-    if (!state.projects.length) {
-      projectGrid.innerHTML = '<p class="empty-state">아직 공개된 프로젝트가 없습니다.</p>';
-      return;
-    }
-
-    if (!list.length) {
-      projectGrid.innerHTML = '<p class="empty-state">조건에 맞는 프로젝트가 없습니다.</p>';
-      return;
-    }
-
-    projectGrid.innerHTML = list
-      .map(
-        (project) => `
-          <article class="project-card" data-id="${project.id}">
-            <span class="category">${escapeHtml(project.category)}</span>
-            <h3>${escapeHtml(project.title)}</h3>
-            <p>${escapeHtml(project.description)}</p>
-            <div class="tag-list">${project.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div>
-          </article>
-        `
-      )
-      .join('');
-
-    projectGrid.querySelectorAll('.project-card').forEach((card) => {
-      card.addEventListener('click', () => openProjectModal(Number(card.dataset.id)));
-    });
-  }
-
-  searchInput.addEventListener('input', (event) => {
-    searchTerm = event.target.value;
-    renderProjects();
-  });
 
   renderFilterButtons();
   renderProjects();
@@ -242,23 +347,24 @@ function setupPublicProjects() {
 function setupProjectModal() {
   const modal = getEl('project-modal');
   const modalCard = getEl('modal-card');
-  const modalClose = getEl('modal-close');
-  if (!modal || !modalCard || !modalClose) return;
+  const closeBtn = getEl('modal-close');
+  if (!modal || !modalCard || !closeBtn || modalEventsBound) return;
 
-  modalClose.onclick = () => {
+  closeBtn.addEventListener('click', () => {
     if (modal.open) modal.close();
-  };
+  });
 
-  modal.onclick = (event) => {
+  modal.addEventListener('click', (event) => {
     const bounds = modalCard.getBoundingClientRect();
     const isOutside =
       event.clientX < bounds.left ||
       event.clientX > bounds.right ||
       event.clientY < bounds.top ||
       event.clientY > bounds.bottom;
-
     if (isOutside && modal.open) modal.close();
-  };
+  });
+
+  modalEventsBound = true;
 }
 
 function openProjectModal(id) {
@@ -268,78 +374,40 @@ function openProjectModal(id) {
   const project = state.projects.find((item) => item.id === id);
   if (!project) return;
 
+  const linkEl = getEl('modal-link');
+  const fileEl = getEl('modal-file-link');
+
   getEl('modal-category').textContent = project.category;
   getEl('modal-title').textContent = project.title;
   getEl('modal-desc').textContent = project.description;
   getEl('modal-tags').innerHTML = project.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('');
-  getEl('modal-link').href = project.link || '#';
+
+  if (project.link) {
+    linkEl.href = project.link;
+    linkEl.classList.remove('hidden');
+  } else {
+    linkEl.classList.add('hidden');
+  }
+
+  if (project.downloadDataUrl) {
+    fileEl.href = resolveDownloadUrl(project);
+    fileEl.download = project.downloadName || '';
+    fileEl.classList.remove('hidden');
+  } else {
+    fileEl.href = '#';
+    fileEl.download = '';
+    fileEl.classList.add('hidden');
+  }
 
   if (typeof modal.showModal === 'function') modal.showModal();
 }
 
-async function sha256(text) {
-  const msgBuffer = new TextEncoder().encode(text);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function setupAdminPage() {
-  const adminLogin = getEl('admin-login');
-  if (!adminLogin) return;
-
-  const adminApp = getEl('admin-app');
-  const loginInput = getEl('admin-password');
-  const loginButton = getEl('admin-login-btn');
-  const loginError = getEl('admin-login-error');
-  const logoutButton = getEl('admin-logout');
-
-  function showAdminApp() {
-    adminLogin.classList.add('hidden');
-    adminApp.classList.remove('hidden');
-    fillAdminContentForm();
-    renderProjectAdminList();
-  }
-
-  function hideAdminApp() {
-    adminApp.classList.add('hidden');
-    adminLogin.classList.remove('hidden');
-    loginInput.value = '';
-  }
-
-  if (sessionStorage.getItem(ADMIN_SESSION_KEY) === 'ok') {
-    showAdminApp();
-  }
-
-  loginButton.addEventListener('click', async () => {
-    loginError.textContent = '';
-    const entered = loginInput.value.trim();
-    if (!entered) {
-      loginError.textContent = '비밀번호를 입력해 주세요.';
-      return;
-    }
-
-    const hash = await sha256(entered);
-    if (hash !== getAdminPasswordHash()) {
-      loginError.textContent = '비밀번호가 일치하지 않습니다.';
-      return;
-    }
-
-    sessionStorage.setItem(ADMIN_SESSION_KEY, 'ok');
-    showAdminApp();
-  });
-
-  logoutButton.addEventListener('click', () => {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY);
-    hideAdminApp();
-  });
-
-  setupAdminActions();
-}
-
 function fillAdminContentForm() {
+  const anchor = getEl('f-hero-eyebrow');
+  if (!anchor) return;
+
   const c = state.content;
-  getEl('f-hero-eyebrow').value = c.heroEyebrow;
+  anchor.value = c.heroEyebrow;
   getEl('f-hero-title').value = c.heroTitle;
   getEl('f-hero-copy').value = c.heroCopy;
   getEl('f-profile-title').value = c.profileTitle;
@@ -357,24 +425,26 @@ function fillAdminContentForm() {
 }
 
 function clearProjectForm() {
+  if (!getEl('p-id')) return;
   getEl('p-id').value = '';
   getEl('p-category').value = '';
   getEl('p-title').value = '';
   getEl('p-description').value = '';
   getEl('p-tags').value = '';
   getEl('p-link').value = '';
+  getEl('p-file').value = '';
 }
 
 function renderProjectAdminList() {
-  const projectList = getEl('project-list');
-  if (!projectList) return;
+  const list = getEl('project-list');
+  if (!list) return;
 
   if (!state.projects.length) {
-    projectList.innerHTML = '<p class="admin-tip">등록된 프로젝트가 없습니다.</p>';
+    list.innerHTML = '<p class="admin-tip">등록된 프로젝트가 없습니다.</p>';
     return;
   }
 
-  projectList.innerHTML = state.projects
+  list.innerHTML = state.projects
     .map(
       (project) => `
         <div class="project-admin-item" data-id="${project.id}">
@@ -388,7 +458,7 @@ function renderProjectAdminList() {
     )
     .join('');
 
-  projectList.querySelectorAll('.project-admin-item').forEach((row) => {
+  list.querySelectorAll('.project-admin-item').forEach((row) => {
     const id = Number(row.dataset.id);
 
     row.querySelector('[data-action="edit"]').addEventListener('click', () => {
@@ -399,33 +469,21 @@ function renderProjectAdminList() {
       getEl('p-title').value = project.title;
       getEl('p-description').value = project.description;
       getEl('p-tags').value = project.tags.join(', ');
-      getEl('p-link').value = project.link;
+      getEl('p-link').value = project.link || '';
+      getEl('p-file').value = '';
     });
 
-    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+    row.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       if (!confirm('이 프로젝트를 삭제하시겠습니까?')) return;
       state.projects = state.projects.filter((item) => item.id !== id);
-      saveDraft();
       renderProjectAdminList();
+      renderPublicPage();
+      await saveCloudState('프로젝트가 삭제되었습니다.');
     });
   });
 }
 
-function readBlueprintText(value) {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [title, ...rest] = line.split('|');
-      return {
-        title: title?.trim() || '제목 없음',
-        description: rest.join('|').trim() || '설명 없음',
-      };
-    });
-}
-
-function saveContentFromAdmin() {
+async function saveContentFromAdmin() {
   state.content = {
     heroEyebrow: getEl('f-hero-eyebrow').value.trim(),
     heroTitle: getEl('f-hero-title').value.trim(),
@@ -442,19 +500,19 @@ function saveContentFromAdmin() {
     blueprintSubtitle: getEl('f-blueprint-subtitle').value.trim(),
     footerNote: getEl('f-footer-note').value.trim(),
   };
-
   const parsedBlueprints = readBlueprintText(getEl('f-blueprints').value);
   state.blueprints = parsedBlueprints.length ? parsedBlueprints : deepClone(defaultState.blueprints);
 
-  saveDraft();
-  alert('문구 작업본이 저장되었습니다. 완료 후 data.json 다운로드를 진행해 주세요.');
+  renderPublicPage();
+  await saveCloudState('문구가 저장되었습니다.');
 }
 
-function saveProjectFromAdmin() {
+async function saveProjectFromAdmin() {
   const category = getEl('p-category').value.trim();
   const title = getEl('p-title').value.trim();
   const description = getEl('p-description').value.trim();
   const link = getEl('p-link').value.trim();
+  const file = getEl('p-file').files?.[0] || null;
   const tags = getEl('p-tags')
     .value.split(',')
     .map((tag) => tag.trim())
@@ -465,21 +523,64 @@ function saveProjectFromAdmin() {
     return;
   }
 
-  const editingId = Number(getEl('p-id').value);
+  let downloadDataUrl = '';
+  let downloadName = '';
+  const editingId = Number(getEl('p-id').value || '0');
+
+  if (editingId) {
+    const existing = state.projects.find((item) => item.id === editingId);
+    if (existing) {
+      downloadDataUrl = existing.downloadDataUrl || '';
+      downloadName = existing.downloadName || '';
+    }
+  }
+
+  if (file) {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      alert('첨부 파일은 2MB 이하로 업로드해 주세요.');
+      return;
+    }
+    try {
+      downloadDataUrl = await fileToDataUrl(file);
+      downloadName = file.name;
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+  }
 
   if (editingId) {
     const idx = state.projects.findIndex((item) => item.id === editingId);
     if (idx > -1) {
-      state.projects[idx] = { ...state.projects[idx], category, title, description, tags, link };
+      state.projects[idx] = {
+        ...state.projects[idx],
+        category,
+        title,
+        description,
+        tags,
+        link,
+        downloadDataUrl,
+        downloadName,
+      };
     }
   } else {
     const nextId = state.projects.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-    state.projects.unshift({ id: nextId, category, title, description, tags, link });
+    state.projects.unshift({
+      id: nextId,
+      category,
+      title,
+      description,
+      tags,
+      link,
+      downloadDataUrl,
+      downloadName,
+    });
   }
 
-  saveDraft();
   clearProjectForm();
   renderProjectAdminList();
+  renderPublicPage();
+  await saveCloudState('프로젝트가 저장되었습니다.');
 }
 
 function exportStateJson() {
@@ -494,19 +595,14 @@ function exportStateJson() {
 
 function importStateJson(file) {
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      const parsed = JSON.parse(String(reader.result));
-      if (!isValidState(parsed)) {
-        alert('올바른 형식의 JSON이 아닙니다.');
-        return;
-      }
-
+      const parsed = normalizeState(JSON.parse(String(reader.result)));
       state = parsed;
-      saveDraft();
+      renderPublicPage();
       fillAdminContentForm();
       renderProjectAdminList();
-      alert('JSON 작업본을 가져왔습니다.');
+      await saveCloudState('JSON을 불러와 반영했습니다.');
     } catch {
       alert('JSON 파싱에 실패했습니다.');
     }
@@ -515,30 +611,36 @@ function importStateJson(file) {
 }
 
 function setupAdminActions() {
-  const contentSave = getEl('content-save');
-  if (!contentSave) return;
+  if (adminActionsBound || !getEl('content-save')) return;
 
-  contentSave.addEventListener('click', saveContentFromAdmin);
-  getEl('project-save').addEventListener('click', saveProjectFromAdmin);
-  getEl('project-clear').addEventListener('click', clearProjectForm);
-  getEl('export-json').addEventListener('click', exportStateJson);
+  getEl('content-save').addEventListener('click', () => {
+    saveContentFromAdmin();
+  });
+  getEl('project-save')?.addEventListener('click', () => {
+    saveProjectFromAdmin();
+  });
+  getEl('project-clear')?.addEventListener('click', clearProjectForm);
+  getEl('export-json')?.addEventListener('click', exportStateJson);
 
-  getEl('import-json').addEventListener('change', (event) => {
+  getEl('import-json')?.addEventListener('change', (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     importStateJson(file);
     event.target.value = '';
   });
 
-  getEl('reset-data').addEventListener('click', async () => {
-    if (!confirm('기준 data.json 상태로 되돌리시겠습니까?')) return;
-    state = await loadDataFileState();
-    clearDraft();
+  getEl('reset-data')?.addEventListener('click', async () => {
+    if (!confirm('초기 데이터로 복원하시겠습니까?')) return;
+    const currentHash = getCurrentAdminHash();
+    state = deepClone(defaultState);
+    state.meta.adminPasswordHash = currentHash;
+    renderPublicPage();
     fillAdminContentForm();
     renderProjectAdminList();
+    await saveCloudState('초기 데이터로 복원되었습니다.');
   });
 
-  getEl('pwd-save').addEventListener('click', async () => {
+  getEl('pwd-save')?.addEventListener('click', async () => {
     const current = getEl('pwd-current').value.trim();
     const next = getEl('pwd-new').value.trim();
     const confirmText = getEl('pwd-confirm').value.trim();
@@ -549,13 +651,13 @@ function setupAdminActions() {
     }
 
     const currentHash = await sha256(current);
-    if (currentHash !== getAdminPasswordHash()) {
+    if (currentHash !== getCurrentAdminHash()) {
       alert('현재 비밀번호가 올바르지 않습니다.');
       return;
     }
 
-    if (next.length < 8) {
-      alert('새 비밀번호는 8자 이상으로 설정해 주세요.');
+    if (next.length < 4) {
+      alert('새 비밀번호는 4자 이상으로 설정해 주세요.');
       return;
     }
 
@@ -564,32 +666,114 @@ function setupAdminActions() {
       return;
     }
 
-    const nextHash = await sha256(next);
-    localStorage.setItem(ADMIN_PASSWORD_HASH_KEY, nextHash);
+    state.meta.adminPasswordHash = await sha256(next);
     getEl('pwd-current').value = '';
     getEl('pwd-new').value = '';
     getEl('pwd-confirm').value = '';
+    await saveCloudState('비밀번호가 변경되었습니다.');
     alert('비밀번호가 변경되었습니다.');
   });
+
+  adminActionsBound = true;
+}
+
+function openInlineAdminDrawer() {
+  const drawer = getEl('admin-drawer');
+  if (!drawer) return;
+  fillAdminContentForm();
+  renderProjectAdminList();
+  setupAdminActions();
+  drawer.classList.remove('hidden');
+  drawer.setAttribute('aria-hidden', 'false');
+}
+
+function closeInlineAdminDrawer() {
+  const drawer = getEl('admin-drawer');
+  if (!drawer) return;
+  drawer.classList.add('hidden');
+  drawer.setAttribute('aria-hidden', 'true');
+}
+
+function setupInlineAdmin() {
+  const fab = getEl('admin-fab');
+  const drawer = getEl('admin-drawer');
+  const closeBtn = getEl('admin-close');
+  if (!fab || !drawer || !closeBtn) return;
+
+  fab.addEventListener('click', async () => {
+    if (sessionStorage.getItem(ADMIN_SESSION_KEY) === 'ok') {
+      openInlineAdminDrawer();
+      return;
+    }
+
+    const typed = prompt('관리자 비밀번호를 입력해 주세요. (초기 비밀번호: 0000)');
+    if (!typed) return;
+
+    const hashed = await sha256(typed.trim());
+    if (hashed !== getCurrentAdminHash()) {
+      alert('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    sessionStorage.setItem(ADMIN_SESSION_KEY, 'ok');
+    openInlineAdminDrawer();
+  });
+
+  closeBtn.addEventListener('click', closeInlineAdminDrawer);
+}
+
+async function syncFromCloudIfNeeded() {
+  if (isSavingToCloud || isAdminDrawerOpen()) return;
+
+  try {
+    const remote = await fetchCloudState();
+    const remoteUpdatedAt = remote.meta?.updatedAt || null;
+    if (!remoteUpdatedAt) return;
+    if (remoteUpdatedAt === lastSeenUpdatedAt) return;
+
+    state = remote;
+    lastSeenUpdatedAt = remoteUpdatedAt;
+    saveCache();
+    renderPublicPage();
+  } catch {
+    // Ignore polling errors silently
+  }
+}
+
+function startCloudPolling() {
+  setInterval(() => {
+    syncFromCloudIfNeeded();
+  }, CLOUD_POLL_MS);
 }
 
 async function initializeState() {
-  state = await loadDataFileState();
+  try {
+    state = normalizeState(await fetchCloudState());
+    lastSeenUpdatedAt = state.meta?.updatedAt || null;
+    saveCache();
 
-  const adminLogin = getEl('admin-login');
-  if (adminLogin) {
-    const draft = loadDraft();
-    if (draft) {
-      const useDraft = confirm('임시 작업본이 있습니다. 작업본을 불러오시겠습니까?');
-      if (useDraft) state = draft;
+    // 최초/손상 데이터로 updatedAt이 없는 경우 기준 상태를 재기록합니다.
+    if (!lastSeenUpdatedAt) {
+      await saveCloudState();
     }
+  } catch {
+    const cached = loadCache();
+    if (cached) {
+      state = cached;
+      lastSeenUpdatedAt = state.meta?.updatedAt || null;
+      return;
+    }
+
+    state = deepClone(defaultState);
+    await saveCloudState();
   }
 }
 
 async function main() {
   await initializeState();
   renderPublicPage();
-  setupAdminPage();
+  setupInlineAdmin();
+  startCloudPolling();
 }
 
 main();

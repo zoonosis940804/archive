@@ -497,6 +497,63 @@ h3,
   line-height: 1.7;
 }
 
+.admin-fab {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 60;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.62rem 0.9rem;
+  background: linear-gradient(120deg, #0f3043, #0f8a96);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 70;
+  width: min(460px, 96vw);
+  height: 100vh;
+  overflow-y: auto;
+  background: #edf5fb;
+  border-left: 1px solid #d3e4ee;
+  box-shadow: -20px 0 48px rgba(4, 26, 39, 0.25);
+  padding: 1rem;
+}
+
+.admin-drawer-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.2rem 0 0.65rem;
+  background: #edf5fb;
+  border-bottom: 1px solid #d6e7f1;
+}
+
+.admin-drawer-head h2 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.admin-drawer-head button {
+  border: 1px solid #b8cddd;
+  background: #ffffff;
+  color: #1d4157;
+  padding: 0.4rem 0.68rem;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
 .admin-page {
   background: #edf5fb;
 }
@@ -590,6 +647,16 @@ h3,
   font-size: 0.82rem;
   color: #3c6278;
   margin-top: 0.55rem;
+}
+
+.admin-section .admin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.admin-section .admin-check input[type='checkbox'] {
+  width: auto;
 }
 
 .admin-section textarea {

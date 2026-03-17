@@ -102,9 +102,80 @@
         <h3 id="modal-title"></h3>
         <p class="modal-desc" id="modal-desc"></p>
         <div class="tag-list" id="modal-tags"></div>
+        <a id="modal-file-link" class="btn btn-primary hidden" download>첨부 파일 다운로드</a>
         <a id="modal-link" class="btn btn-primary" target="_blank" rel="noopener noreferrer">프로젝트 열기</a>
       </article>
     </dialog>
+
+    <button id="admin-fab" class="admin-fab" type="button">관리자</button>
+    <aside id="admin-drawer" class="admin-drawer hidden" aria-hidden="true">
+      <div class="admin-drawer-head">
+        <h2>홈페이지 관리자</h2>
+        <button id="admin-close" type="button">닫기</button>
+      </div>
+
+      <section class="admin-section">
+        <h3>기본 문구</h3>
+        <label>상단 라벨<input id="f-hero-eyebrow" type="text" /></label>
+        <label>메인 제목(줄바꿈은 | 사용)<input id="f-hero-title" type="text" /></label>
+        <label>메인 설명<textarea id="f-hero-copy"></textarea></label>
+        <label>프로필 제목<input id="f-profile-title" type="text" /></label>
+        <label>프로필 역할<input id="f-profile-role" type="text" /></label>
+        <label>프로필 요약<textarea id="f-profile-summary"></textarea></label>
+        <label>소개 섹션 제목<input id="f-about-title" type="text" /></label>
+        <label>소개 문단 1<textarea id="f-about-body-1"></textarea></label>
+        <label>소개 문단 2<textarea id="f-about-body-2"></textarea></label>
+        <label>인용문<input id="f-about-quote" type="text" /></label>
+        <label>컬렉션 제목<input id="f-collection-title" type="text" /></label>
+        <label>운영 기준 제목<input id="f-blueprint-title" type="text" /></label>
+        <label>운영 기준 부제<input id="f-blueprint-subtitle" type="text" /></label>
+        <label>하단 멘트<input id="f-footer-note" type="text" /></label>
+      </section>
+
+      <section class="admin-section">
+        <h3>운영 기준 카드</h3>
+        <p class="admin-tip">한 줄에 1개, 형식: 제목|설명</p>
+        <textarea id="f-blueprints" class="admin-large"></textarea>
+      </section>
+
+      <section class="admin-section">
+        <h3>프로젝트 추가/수정</h3>
+        <input id="p-id" type="hidden" />
+        <label>카테고리<input id="p-category" type="text" placeholder="예: 교육 실천" /></label>
+        <label>제목<input id="p-title" type="text" /></label>
+        <label>설명<textarea id="p-description"></textarea></label>
+        <label>태그(쉼표 구분)<input id="p-tags" type="text" placeholder="#태그1, #태그2" /></label>
+        <label>외부 링크<input id="p-link" type="url" placeholder="https://" /></label>
+        <label>첨부 파일(exe/zip/msi)<input id="p-file" type="file" accept=".exe,.zip,.msi,.pdf" /></label>
+        <div class="admin-inline">
+          <button id="project-save" type="button">저장</button>
+          <button id="project-clear" type="button">입력 초기화</button>
+        </div>
+        <div id="project-list" class="project-admin-list"></div>
+      </section>
+
+      <section class="admin-section">
+        <h3>즉시 저장</h3>
+        <p class="admin-tip">저장 버튼을 누르면 홈페이지에 바로 반영됩니다.</p>
+        <div class="admin-inline">
+          <button id="content-save" type="button">문구 저장</button>
+          <button id="export-json" type="button">data.json 다운로드</button>
+          <label class="import-btn">JSON 불러오기<input id="import-json" type="file" accept="application/json" /></label>
+          <button id="reset-data" type="button">초기 데이터로 복원</button>
+        </div>
+        <p id="admin-status" class="admin-tip" aria-live="polite"></p>
+      </section>
+
+      <section class="admin-section">
+        <h3>관리자 비밀번호 변경</h3>
+        <label>현재 비밀번호<input id="pwd-current" type="password" autocomplete="current-password" /></label>
+        <label>새 비밀번호<input id="pwd-new" type="password" autocomplete="new-password" /></label>
+        <label>새 비밀번호 확인<input id="pwd-confirm" type="password" autocomplete="new-password" /></label>
+        <div class="admin-inline">
+          <button id="pwd-save" type="button">비밀번호 변경</button>
+        </div>
+      </section>
+    </aside>
 
     <script src="./script.js"></script>
   </body>

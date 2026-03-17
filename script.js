@@ -18,8 +18,6 @@ const defaultState = {
   },
   categories: [...DEFAULT_CATEGORIES],
   content: {
-    siteTitle: 'Builder Archive | 교육·투자·도구 개발',
-    faviconHref: '',
     heroEyebrow: 'CLASSROOM-TESTED TOOL ARCHIVE',
     heroTitle: '현장에서 검증한 도구를 공개합니다|복잡한 설명보다 바로 쓸 수 있는 정보로 안내합니다|교육·투자·개발 관점을 연결합니다',
     heroCopy:
@@ -75,24 +73,6 @@ function migrateCategoryName(category) {
 function setAdminStatus(text) {
   const statusEl = getEl('admin-status');
   if (statusEl) statusEl.textContent = text;
-}
-
-function applySiteMeta() {
-  const titleText = String(state.content?.siteTitle || '').trim() || defaultState.content.siteTitle;
-  document.title = titleText;
-
-  const faviconHref = String(state.content?.faviconHref || '').trim();
-  let faviconEl = document.querySelector('link[rel="icon"]');
-  if (!faviconEl) {
-    faviconEl = document.createElement('link');
-    faviconEl.setAttribute('rel', 'icon');
-    document.head.appendChild(faviconEl);
-  }
-  faviconEl.setAttribute(
-    'href',
-    faviconHref ||
-      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%230b5165'/%3E%3Ctext x='50' y='63' text-anchor='middle' font-size='54' fill='white'%3EB%3C/text%3E%3C/svg%3E"
-  );
 }
 
 function hasCoreShape(candidate) {
@@ -255,7 +235,6 @@ function renderPublicPage() {
   if (!heroEyebrow) return;
 
   const content = state.content;
-  applySiteMeta();
   heroEyebrow.textContent = content.heroEyebrow;
   getEl('hero-title').innerHTML = content.heroTitle
     .split('|')
@@ -459,8 +438,6 @@ function fillAdminContentForm() {
   if (!anchor) return;
 
   const c = state.content;
-  getEl('f-site-title').value = c.siteTitle;
-  getEl('f-favicon-href').value = c.faviconHref;
   anchor.value = c.heroEyebrow;
   getEl('f-hero-title').value = c.heroTitle;
   getEl('f-hero-copy').value = c.heroCopy;
@@ -699,8 +676,6 @@ function renderProjectAdminList() {
 
 async function saveContentFromAdmin() {
   state.content = {
-    siteTitle: getEl('f-site-title').value.trim(),
-    faviconHref: getEl('f-favicon-href').value.trim(),
     heroEyebrow: getEl('f-hero-eyebrow').value.trim(),
     heroTitle: getEl('f-hero-title').value.trim(),
     heroCopy: getEl('f-hero-copy').value.trim(),
@@ -956,6 +931,7 @@ async function syncFromCloudIfNeeded() {
     const remote = await fetchCloudState();
     const remoteUpdatedAt = remote.meta?.updatedAt || null;
     if (!remoteUpdatedAt) return;
+    if (remote.projects.length === 0 && state.projects.length > 0) return;
     const remoteTs = toMillis(remoteUpdatedAt);
     const localTs = toMillis(lastSeenUpdatedAt);
     if (remoteTs <= localTs) return;
@@ -990,6 +966,14 @@ async function initializeState() {
       return;
     }
 
+    // 원격이 비어 있고 로컬 캐시에 데이터가 있으면 캐시 우선 복구
+    if (cached && remote.projects.length === 0 && cached.projects.length > 0) {
+      state = cached;
+      lastSeenUpdatedAt = state.meta?.updatedAt || null;
+      await saveCloudState();
+      return;
+    }
+
     state = remote;
     lastSeenUpdatedAt = state.meta?.updatedAt || null;
     saveCache();
@@ -1007,7 +991,7 @@ async function initializeState() {
 
     state = deepClone(defaultState);
     touchLocalState();
-    await saveCloudState();
+    // 네트워크 오류 시 원격을 기본값으로 덮어쓰지 않음
   }
 }
 

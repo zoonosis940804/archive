@@ -18,6 +18,8 @@ const defaultState = {
   },
   categories: [...DEFAULT_CATEGORIES],
   content: {
+    siteTitle: 'Builder Archive | 교육·투자·도구 개발',
+    faviconHref: '',
     heroEyebrow: 'CLASSROOM-TESTED TOOL ARCHIVE',
     heroTitle: '현장에서 검증한 도구를 공개합니다|복잡한 설명보다 바로 쓸 수 있는 정보로 안내합니다|교육·투자·개발 관점을 연결합니다',
     heroCopy:
@@ -73,6 +75,24 @@ function migrateCategoryName(category) {
 function setAdminStatus(text) {
   const statusEl = getEl('admin-status');
   if (statusEl) statusEl.textContent = text;
+}
+
+function applySiteMeta() {
+  const titleText = String(state.content?.siteTitle || '').trim() || defaultState.content.siteTitle;
+  document.title = titleText;
+
+  const faviconHref = String(state.content?.faviconHref || '').trim();
+  let faviconEl = document.querySelector('link[rel="icon"]');
+  if (!faviconEl) {
+    faviconEl = document.createElement('link');
+    faviconEl.setAttribute('rel', 'icon');
+    document.head.appendChild(faviconEl);
+  }
+  faviconEl.setAttribute(
+    'href',
+    faviconHref ||
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%230b5165'/%3E%3Ctext x='50' y='63' text-anchor='middle' font-size='54' fill='white'%3EB%3C/text%3E%3C/svg%3E"
+  );
 }
 
 function hasCoreShape(candidate) {
@@ -235,6 +255,7 @@ function renderPublicPage() {
   if (!heroEyebrow) return;
 
   const content = state.content;
+  applySiteMeta();
   heroEyebrow.textContent = content.heroEyebrow;
   getEl('hero-title').innerHTML = content.heroTitle
     .split('|')
@@ -308,7 +329,15 @@ function renderProjects() {
   const didResetCategory = ensureActiveCategoryValid();
   if (didResetCategory) renderFilterButtons();
 
-  const list = filteredProjects();
+  let list = filteredProjects();
+  if (!list.length && state.projects.length && !searchTerm.trim()) {
+    const hasCategoryMatch = activeCategory === '전체' || state.projects.some((project) => project.category === activeCategory);
+    if (!hasCategoryMatch) {
+      activeCategory = '전체';
+      renderFilterButtons();
+      list = [...state.projects];
+    }
+  }
   count.textContent = `총 ${state.projects.length}개 중 ${list.length}개 표시`;
 
   if (!state.projects.length) {
@@ -338,19 +367,26 @@ function renderProjects() {
     })
     .join('');
 
-  grid.querySelectorAll('.project-card').forEach((card) => {
-    card.addEventListener('click', () => openProjectModal(Number(card.dataset.id)));
-  });
 }
 
 function setupPublicProjects() {
   const searchInput = getEl('search-input');
-  if (!searchInput) return;
+  const grid = getEl('project-grid');
+  if (!searchInput || !grid) return;
 
   if (!publicEventsBound) {
     searchInput.addEventListener('input', (event) => {
       searchTerm = event.target.value;
       renderProjects();
+    });
+    grid.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const card = target.closest('.project-card');
+      if (!card) return;
+      const id = Number(card.dataset.id);
+      if (!Number.isFinite(id)) return;
+      openProjectModal(id);
     });
     publicEventsBound = true;
   }
@@ -423,6 +459,8 @@ function fillAdminContentForm() {
   if (!anchor) return;
 
   const c = state.content;
+  getEl('f-site-title').value = c.siteTitle;
+  getEl('f-favicon-href').value = c.faviconHref;
   anchor.value = c.heroEyebrow;
   getEl('f-hero-title').value = c.heroTitle;
   getEl('f-hero-copy').value = c.heroCopy;
@@ -661,6 +699,8 @@ function renderProjectAdminList() {
 
 async function saveContentFromAdmin() {
   state.content = {
+    siteTitle: getEl('f-site-title').value.trim(),
+    faviconHref: getEl('f-favicon-href').value.trim(),
     heroEyebrow: getEl('f-hero-eyebrow').value.trim(),
     heroTitle: getEl('f-hero-title').value.trim(),
     heroCopy: getEl('f-hero-copy').value.trim(),
@@ -908,7 +948,9 @@ function setupInlineAdmin() {
 }
 
 async function syncFromCloudIfNeeded() {
-  if (isSavingToCloud || isAdminDrawerOpen()) return;
+  const modal = getEl('project-modal');
+  const isModalOpen = Boolean(modal && modal.open);
+  if (isSavingToCloud || isAdminDrawerOpen() || isModalOpen) return;
 
   try {
     const remote = await fetchCloudState();

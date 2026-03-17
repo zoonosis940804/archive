@@ -296,6 +296,7 @@ h3,
 
 .search-wrap input,
 .admin-section input,
+.admin-section select,
 .admin-section textarea,
 .admin-login input {
   width: 100%;
@@ -307,6 +308,7 @@ h3,
 
 .search-wrap input:focus-visible,
 .admin-section input:focus-visible,
+.admin-section select:focus-visible,
 .admin-section textarea:focus-visible,
 .admin-login input:focus-visible {
   outline: 2px solid rgba(0, 125, 138, 0.25);

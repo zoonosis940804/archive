@@ -29,7 +29,7 @@
         <p class="hero-copy" id="hero-copy"></p>
         <div class="hero-cta">
           <a class="btn btn-primary" href="#collection">프로젝트 보기</a>
-          <a class="btn btn-ghost" href="#blueprint">운영 기준 보기</a>
+          <a class="btn btn-ghost" href="#about">소개 보기</a>
         </div>
       </div>
     </header>
@@ -77,15 +77,6 @@
         </div>
       </section>
 
-      <section class="section section-blueprint" id="blueprint">
-        <div class="container">
-          <div class="section-head">
-            <h2 id="blueprint-title"></h2>
-            <p id="blueprint-subtitle"></p>
-          </div>
-          <div class="blueprint-grid" id="blueprint-grid"></div>
-        </div>
-      </section>
     </main>
 
     <footer class="footer">
@@ -127,21 +118,23 @@
         <label>소개 문단 2<textarea id="f-about-body-2"></textarea></label>
         <label>인용문<input id="f-about-quote" type="text" /></label>
         <label>컬렉션 제목<input id="f-collection-title" type="text" /></label>
-        <label>운영 기준 제목<input id="f-blueprint-title" type="text" /></label>
-        <label>운영 기준 부제<input id="f-blueprint-subtitle" type="text" /></label>
         <label>하단 멘트<input id="f-footer-note" type="text" /></label>
-      </section>
-
-      <section class="admin-section">
-        <h3>운영 기준 카드</h3>
-        <p class="admin-tip">한 줄에 1개, 형식: 제목|설명</p>
-        <textarea id="f-blueprints" class="admin-large"></textarea>
       </section>
 
       <section class="admin-section">
         <h3>프로젝트 추가/수정</h3>
         <input id="p-id" type="hidden" />
-        <label>카테고리<input id="p-category" type="text" placeholder="예: 교육 실천" /></label>
+        <label
+          >카테고리
+          <select id="p-category">
+            <option value="">선택</option>
+            <option value="비트코인">비트코인</option>
+            <option value="게임">게임</option>
+            <option value="수업 보조">수업 보조</option>
+            <option value="학습 보조">학습 보조</option>
+            <option value="기타">기타</option>
+          </select>
+        </label>
         <label>제목<input id="p-title" type="text" /></label>
         <label>설명<textarea id="p-description"></textarea></label>
         <label>태그(쉼표 구분)<input id="p-tags" type="text" placeholder="#태그1, #태그2" /></label>

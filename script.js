@@ -4,6 +4,7 @@ const CACHE_KEY = 'builder_archive_cache_v3';
 const ADMIN_SESSION_KEY = 'builder_archive_admin_session';
 const DEFAULT_ADMIN_PASSWORD_HASH = '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0'; // 0000
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const FIXED_CATEGORIES = ['비트코인', '게임', '수업 보조', '학습 보조', '기타'];
 
 const defaultState = {
   meta: {
@@ -26,32 +27,8 @@ const defaultState = {
       '교육 실천, 도구 개발, 투자 실험으로 분류해 탐색 동선을 단순하게 유지합니다. 필요한 항목을 찾은 뒤 바로 접속하실 수 있도록 링크 중심 구조를 적용했습니다.',
     aboutQuote: '필요한 정보는 빠르게, 실행은 더 쉽게.',
     collectionTitle: 'Project Collection',
-    blueprintTitle: '사이트 운영 기준',
-    blueprintSubtitle: '방문자 경험을 우선하기 위한 핵심 기준',
     footerNote: '© 2026 Builder Archive · 교육/투자/도구개발 공개 아카이브',
   },
-  blueprints: [
-    {
-      title: '1) 문제 먼저 안내',
-      description: '각 프로젝트는 무엇을 해결하는 도구인지부터 명확하게 보여드립니다.',
-    },
-    {
-      title: '2) 즉시 활용 가능',
-      description: '탐색 후 바로 실행하실 수 있도록 링크와 핵심 정보 중심으로 구성합니다.',
-    },
-    {
-      title: '3) 검증 기반 업데이트',
-      description: '현장 적용 결과와 피드백을 반영해 지속적으로 내용을 개선합니다.',
-    },
-    {
-      title: '4) 탐색 동선 단순화',
-      description: '카테고리와 검색 기능으로 필요한 프로젝트를 빠르게 찾으실 수 있습니다.',
-    },
-    {
-      title: '5) 과장 없는 설명',
-      description: '실제로 확인 가능한 정보만 정리해 신뢰도 높은 아카이브를 유지합니다.',
-    },
-  ],
   projects: [],
 };
 
@@ -87,7 +64,7 @@ function setAdminStatus(text) {
 }
 
 function hasCoreShape(candidate) {
-  return Boolean(candidate && candidate.content && Array.isArray(candidate.blueprints) && Array.isArray(candidate.projects));
+  return Boolean(candidate && candidate.content && Array.isArray(candidate.projects));
 }
 
 function normalizeState(input) {
@@ -95,11 +72,10 @@ function normalizeState(input) {
 
   const next = deepClone(defaultState);
   next.content = { ...next.content, ...(input.content || {}) };
-  next.blueprints = Array.isArray(input.blueprints) ? input.blueprints : [];
   next.projects = Array.isArray(input.projects)
     ? input.projects.map((project) => ({
         id: Number(project.id) || 0,
-        category: String(project.category || ''),
+        category: FIXED_CATEGORIES.includes(String(project.category || '')) ? String(project.category || '') : '기타',
         title: String(project.title || ''),
         description: String(project.description || ''),
         tags: Array.isArray(project.tags) ? project.tags.map((tag) => String(tag)) : [],
@@ -184,20 +160,6 @@ async function saveCloudState(successMessage) {
   }
 }
 
-function readBlueprintText(value) {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [title, ...rest] = line.split('|');
-      return {
-        title: title?.trim() || '제목 없음',
-        description: rest.join('|').trim() || '설명 없음',
-      };
-    });
-}
-
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -231,26 +193,13 @@ function renderPublicPage() {
   getEl('about-body-2').textContent = content.aboutBody2;
   getEl('about-quote').textContent = content.aboutQuote;
   getEl('collection-title').textContent = content.collectionTitle;
-  getEl('blueprint-title').textContent = content.blueprintTitle;
-  getEl('blueprint-subtitle').textContent = content.blueprintSubtitle;
   getEl('footer-note').textContent = content.footerNote;
-
-  getEl('blueprint-grid').innerHTML = state.blueprints
-    .map(
-      (item) => `
-        <article>
-          <h3>${escapeHtml(item.title)}</h3>
-          <p>${escapeHtml(item.description)}</p>
-        </article>
-      `
-    )
-    .join('');
 
   setupPublicProjects();
 }
 
 function getCategories() {
-  return ['전체', ...new Set(state.projects.map((item) => item.category))];
+  return ['전체', ...FIXED_CATEGORIES];
 }
 
 function filteredProjects() {
@@ -418,10 +367,7 @@ function fillAdminContentForm() {
   getEl('f-about-body-2').value = c.aboutBody2;
   getEl('f-about-quote').value = c.aboutQuote;
   getEl('f-collection-title').value = c.collectionTitle;
-  getEl('f-blueprint-title').value = c.blueprintTitle;
-  getEl('f-blueprint-subtitle').value = c.blueprintSubtitle;
   getEl('f-footer-note').value = c.footerNote;
-  getEl('f-blueprints').value = state.blueprints.map((item) => `${item.title}|${item.description}`).join('\n');
 }
 
 function clearProjectForm() {
@@ -496,12 +442,8 @@ async function saveContentFromAdmin() {
     aboutBody2: getEl('f-about-body-2').value.trim(),
     aboutQuote: getEl('f-about-quote').value.trim(),
     collectionTitle: getEl('f-collection-title').value.trim(),
-    blueprintTitle: getEl('f-blueprint-title').value.trim(),
-    blueprintSubtitle: getEl('f-blueprint-subtitle').value.trim(),
     footerNote: getEl('f-footer-note').value.trim(),
   };
-  const parsedBlueprints = readBlueprintText(getEl('f-blueprints').value);
-  state.blueprints = parsedBlueprints.length ? parsedBlueprints : deepClone(defaultState.blueprints);
 
   renderPublicPage();
   await saveCloudState('문구가 저장되었습니다.');
@@ -520,6 +462,10 @@ async function saveProjectFromAdmin() {
 
   if (!category || !title || !description) {
     alert('카테고리, 제목, 설명은 필수입니다.');
+    return;
+  }
+  if (!FIXED_CATEGORIES.includes(category)) {
+    alert('카테고리를 올바르게 선택해 주세요.');
     return;
   }
 

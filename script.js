@@ -5,6 +5,11 @@ const ADMIN_SESSION_KEY = 'builder_archive_admin_session';
 const DEFAULT_ADMIN_PASSWORD_HASH = '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0'; // 0000
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 const FIXED_CATEGORIES = ['비트코인', '게임', '수업 보조', '학습 보조', '기타'];
+const CATEGORY_MIGRATION = {
+  '교사 보조 도구': '수업 보조',
+  '수업 보조 도구': '수업 보조',
+  '학습 도구': '학습 보조',
+};
 
 const defaultState = {
   meta: {
@@ -58,6 +63,12 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function migrateCategoryName(category) {
+  const raw = String(category || '').trim();
+  if (!raw) return '기타';
+  return CATEGORY_MIGRATION[raw] || raw;
+}
+
 function setAdminStatus(text) {
   const statusEl = getEl('admin-status');
   if (statusEl) statusEl.textContent = text;
@@ -73,16 +84,19 @@ function normalizeState(input) {
   const next = deepClone(defaultState);
   next.content = { ...next.content, ...(input.content || {}) };
   next.projects = Array.isArray(input.projects)
-    ? input.projects.map((project) => ({
-        id: Number(project.id) || 0,
-        category: FIXED_CATEGORIES.includes(String(project.category || '')) ? String(project.category || '') : '기타',
-        title: String(project.title || ''),
-        description: String(project.description || ''),
-        tags: Array.isArray(project.tags) ? project.tags.map((tag) => String(tag)) : [],
-        link: String(project.link || ''),
-        downloadDataUrl: String(project.downloadDataUrl || ''),
-        downloadName: String(project.downloadName || ''),
-      }))
+    ? input.projects.map((project) => {
+        const migratedCategory = migrateCategoryName(project.category);
+        return {
+          id: Number(project.id) || 0,
+          category: FIXED_CATEGORIES.includes(migratedCategory) ? migratedCategory : '기타',
+          title: String(project.title || ''),
+          description: String(project.description || ''),
+          tags: Array.isArray(project.tags) ? project.tags.map((tag) => String(tag)) : [],
+          link: String(project.link || ''),
+          downloadDataUrl: String(project.downloadDataUrl || ''),
+          downloadName: String(project.downloadName || ''),
+        };
+      })
     : [];
   next.meta = {
     adminPasswordHash: String(input.meta?.adminPasswordHash || DEFAULT_ADMIN_PASSWORD_HASH),
@@ -381,10 +395,26 @@ function fillAdminContentForm() {
   getEl('f-footer-note').value = c.footerNote;
 }
 
+function renderAdminCategorySelect(selected = '') {
+  const select = getEl('p-category');
+  if (!select) return;
+
+  select.innerHTML = [
+    '<option value="">선택</option>',
+    ...FIXED_CATEGORIES.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`),
+  ].join('');
+
+  if (selected && FIXED_CATEGORIES.includes(selected)) {
+    select.value = selected;
+  } else {
+    select.value = '';
+  }
+}
+
 function clearProjectForm() {
   if (!getEl('p-id')) return;
   getEl('p-id').value = '';
-  getEl('p-category').value = '';
+  renderAdminCategorySelect();
   getEl('p-title').value = '';
   getEl('p-description').value = '';
   getEl('p-tags').value = '';
@@ -422,7 +452,7 @@ function renderProjectAdminList() {
       const project = state.projects.find((item) => item.id === id);
       if (!project) return;
       getEl('p-id').value = String(project.id);
-      getEl('p-category').value = project.category;
+      renderAdminCategorySelect(project.category);
       getEl('p-title').value = project.title;
       getEl('p-description').value = project.description;
       getEl('p-tags').value = project.tags.join(', ');
@@ -633,6 +663,7 @@ function openInlineAdminDrawer() {
   const drawer = getEl('admin-drawer');
   if (!drawer) return;
   fillAdminContentForm();
+  renderAdminCategorySelect();
   renderProjectAdminList();
   setupAdminActions();
   drawer.classList.remove('hidden');

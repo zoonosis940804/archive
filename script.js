@@ -109,6 +109,17 @@ function getCurrentAdminHash() {
   return state.meta?.adminPasswordHash || DEFAULT_ADMIN_PASSWORD_HASH;
 }
 
+function touchLocalState() {
+  state.meta.updatedAt = new Date().toISOString();
+  lastSeenUpdatedAt = state.meta.updatedAt;
+  saveCache();
+}
+
+function toMillis(isoText) {
+  const value = Date.parse(isoText || '');
+  return Number.isFinite(value) ? value : 0;
+}
+
 async function sha256(text) {
   const msgBuffer = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -422,6 +433,7 @@ function renderProjectAdminList() {
     row.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       if (!confirm('이 프로젝트를 삭제하시겠습니까?')) return;
       state.projects = state.projects.filter((item) => item.id !== id);
+      touchLocalState();
       renderProjectAdminList();
       renderPublicPage();
       await saveCloudState('프로젝트가 삭제되었습니다.');
@@ -445,6 +457,7 @@ async function saveContentFromAdmin() {
     footerNote: getEl('f-footer-note').value.trim(),
   };
 
+  touchLocalState();
   renderPublicPage();
   await saveCloudState('문구가 저장되었습니다.');
 }
@@ -523,20 +536,11 @@ async function saveProjectFromAdmin() {
     });
   }
 
+  touchLocalState();
   clearProjectForm();
   renderProjectAdminList();
   renderPublicPage();
   await saveCloudState('프로젝트가 저장되었습니다.');
-}
-
-function exportStateJson() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = 'data.json';
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 function importStateJson(file) {
@@ -545,6 +549,7 @@ function importStateJson(file) {
     try {
       const parsed = normalizeState(JSON.parse(String(reader.result)));
       state = parsed;
+      touchLocalState();
       renderPublicPage();
       fillAdminContentForm();
       renderProjectAdminList();
@@ -566,7 +571,6 @@ function setupAdminActions() {
     saveProjectFromAdmin();
   });
   getEl('project-clear')?.addEventListener('click', clearProjectForm);
-  getEl('export-json')?.addEventListener('click', exportStateJson);
 
   getEl('import-json')?.addEventListener('change', (event) => {
     const file = event.target.files?.[0];
@@ -580,6 +584,7 @@ function setupAdminActions() {
     const currentHash = getCurrentAdminHash();
     state = deepClone(defaultState);
     state.meta.adminPasswordHash = currentHash;
+    touchLocalState();
     renderPublicPage();
     fillAdminContentForm();
     renderProjectAdminList();
@@ -613,6 +618,7 @@ function setupAdminActions() {
     }
 
     state.meta.adminPasswordHash = await sha256(next);
+    touchLocalState();
     getEl('pwd-current').value = '';
     getEl('pwd-new').value = '';
     getEl('pwd-confirm').value = '';
@@ -675,7 +681,9 @@ async function syncFromCloudIfNeeded() {
     const remote = await fetchCloudState();
     const remoteUpdatedAt = remote.meta?.updatedAt || null;
     if (!remoteUpdatedAt) return;
-    if (remoteUpdatedAt === lastSeenUpdatedAt) return;
+    const remoteTs = toMillis(remoteUpdatedAt);
+    const localTs = toMillis(lastSeenUpdatedAt);
+    if (remoteTs <= localTs) return;
 
     state = remote;
     lastSeenUpdatedAt = remoteUpdatedAt;
@@ -693,8 +701,21 @@ function startCloudPolling() {
 }
 
 async function initializeState() {
+  const cached = loadCache();
   try {
-    state = normalizeState(await fetchCloudState());
+    const remote = normalizeState(await fetchCloudState());
+    const remoteTs = toMillis(remote.meta?.updatedAt);
+    const cacheTs = toMillis(cached?.meta?.updatedAt);
+
+    if (cached && cacheTs > remoteTs) {
+      state = cached;
+      lastSeenUpdatedAt = state.meta?.updatedAt || null;
+      // 로컬 최신본을 클라우드에 재반영 시도 (실패해도 로컬 유지)
+      await saveCloudState();
+      return;
+    }
+
+    state = remote;
     lastSeenUpdatedAt = state.meta?.updatedAt || null;
     saveCache();
 
@@ -703,7 +724,6 @@ async function initializeState() {
       await saveCloudState();
     }
   } catch {
-    const cached = loadCache();
     if (cached) {
       state = cached;
       lastSeenUpdatedAt = state.meta?.updatedAt || null;
@@ -711,6 +731,7 @@ async function initializeState() {
     }
 
     state = deepClone(defaultState);
+    touchLocalState();
     await saveCloudState();
   }
 }
